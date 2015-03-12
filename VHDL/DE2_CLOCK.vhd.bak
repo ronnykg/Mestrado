@@ -4,7 +4,13 @@ USE  IEEE.STD_LOGIC_ARITH.all;
 USE  IEEE.STD_LOGIC_UNSIGNED.all;
 --USE  IEEE.numeric_std.all;
 USE  IEEE.std_logic_arith.all;
-USE  IEEE.math_real.all;
+--USE  WORK.MY_PACKAGE.all;
+--USE  IEEE.math_real.all;
+LIBRARY IEEE_PROPOSED;
+use IEEE_PROPOSED.fixed_float_types.all;
+use IEEE_PROPOSED.fixed_pkg.all;
+--use IEEE_PROPOSED.fixed_alg_pkg.all;
+use IEEE_PROPOSED.float_pkg.all;
 -- This code displays time in the DE2's LCD Display
 -- Key2  resets time
 ENTITY DE2_CLOCK IS
@@ -21,7 +27,8 @@ ARCHITECTURE a OF DE2_CLOCK IS
 	WRITE_CHAR2,WRITE_CHAR3, RETURN_HOME, TOGGLE_E, RESET1, RESET2, 
 	RESET3, DISPLAY_OFF, DISPLAY_CLEAR); -- WRITE_CHAR4,WRITE_CHAR5,WRITE_CHAR6,WRITE_CHAR7,WRITE_CHAR8, WRITE_CHAR9, WRITE_CHAR10,
 	type memory is array (INTEGER range <>) of std_logic_vector(7 downto 0);
-	type memoryint is array (INTEGER range <>) of integer;
+	type memoryint is array (INTEGER range <>) of float32;
+	type memoryUNS is array (INTEGER range <>) of float32;
 	SIGNAL state, next_command: STATE_TYPE;
 	SIGNAL DATA_BUS_VALUE: STD_LOGIC_VECTOR(7 DOWNTO 0);
 	SIGNAL CLK_COUNT_400HZ: STD_LOGIC_VECTOR(19 DOWNTO 0);
@@ -30,24 +37,24 @@ ARCHITECTURE a OF DE2_CLOCK IS
 	SIGNAL BCD_HRD0,BCD_HRD1,BCD_TSEC: STD_LOGIC_VECTOR(3 DOWNTO 0);
 	SIGNAL DAC_SIGNAL: STD_LOGIC_VECTOR(11 DOWNTO 0);
 	SIGNAL CLK_400HZ, CLK_10HZ, CLK_1HZ : STD_LOGIC;
-	SIGNAL ADC1, ADC2, ADC3: memory(9999 downto 0); --(3999999 downto 0);
-	--SIGNAL FREQ_DIV: INTEGER RANGE 40 to 400000;
-	SIGNAL COUNT_RMS: INTEGER RANGE 0 to 9999 := 0;
-	SIGNAL ADC1_MAX: INTEGER RANGE 0 to 255 := 0;
-	SIGNAL ADC2_MAX: INTEGER RANGE 0 to 255 := 0;
-	SIGNAL ADC3_MAX: INTEGER RANGE 0 to 255 := 0;
+	SIGNAL ADC1, ADC2, ADC3: memory(999 downto 0) := ((others=> (others=>'0'))); --(3999999 downto 0);
+	--SIGNAL FREQ_DIV: INTEGER RANGE 40 to 400000;				
+	SIGNAL COUNT_RMS: INTEGER RANGE 0 to 999:= 0;
+	SIGNAL ADC1_MAX: INTEGER RANGE 0 to 250 := 0;
+	SIGNAL ADC2_MAX: INTEGER RANGE 0 to 250 := 0;
+	SIGNAL ADC3_MAX: INTEGER RANGE 0 to 250 := 0;
 	SIGNAL ADC1_AVC: STD_LOGIC_VECTOR(2 DOWNTO 0) := "000";
 	SIGNAL ADC2_AVC: STD_LOGIC_VECTOR(2 DOWNTO 0) := "000";
 	SIGNAL ADC3_AVC: STD_LOGIC_VECTOR(2 DOWNTO 0) := "000";
-	SIGNAL COUNT_RMS_FINAL: INTEGER RANGE 0 TO 9999 :=0;
-	SIGNAL d1_1: integer range 0 to 400000:= 0 ;
-	SIGNAL d1_2: integer range 0 to 400000:= 0 ;
-	SIGNAL d2_1: integer range 0 to 400000:= 0 ;
-	SIGNAL d2_2: integer range 0 to 400000:= 0 ;
-	SIGNAL y:  integer range 0 to 400000:= 0 ;
-	SIGNAL realW: memoryint(0 to 255); 
-	SIGNAL imagW: memoryint(0 to 255); 
-	SIGNAL IMP: memoryint(0 to 2559); 
+	CONSTANT COUNT_RMS_FINAL: INTEGER := 999;
+	SIGNAL d1_1: float32 ;
+	SIGNAL d1_2: float32 ;
+	SIGNAL y:    float32 ;
+	SIGNAL realW: memoryint(0 to 19); 
+	SIGNAL imagW: memoryint(0 to 19); 
+	SIGNAL IMP: memoryUNS(0 to 999);  --100k is OK
+	SIGNAL IMP_DUMMY:    float32 ;
+	--function  sqrt  ( d : UNSIGNED ) return UNSIGNED ;
 BEGIN
 	LCD_ON <= '1';
 	RESET_LED <= NOT RESET;
@@ -279,32 +286,36 @@ BEGIN
 	    COUNT_RMS <= 0;
 		ELSIF COUNT_RMS = COUNT_RMS_FINAL THEN
 		--COUNT_RMS <= 0;
-				ADC1_MAX <= ADC1(COUNT_RMS_FINAL DOWNTO 0)'HIGH;
-				ADC2_MAX <= ADC1(COUNT_RMS_FINAL DOWNTO 0)'HIGH;
-				ADC3_MAX <= ADC1(COUNT_RMS_FINAL DOWNTO 0)'HIGH;
-			
+				--ADC1_MAX <= ADC1(COUNT_RMS_FINAL DOWNTO 0)'HIGH;
+				--ADC2_MAX <= ADC1(COUNT_RMS_FINAL DOWNTO 0)'HIGH;
+				--ADC3_MAX <= ADC1(COUNT_RMS_FINAL DOWNTO 0)'HIGH;
+			ADC1_AVC <= "000";
+			ADC2_AVC <= "000";
+			ADC3_AVC <= "000";
 			IF (ADC1_MAX = 4294967295) AND (ADC1_AVC /= 0) THEN
-				ADC1_AVC <= ADC1_AVC - 1;
+			--	ADC1_AVC <= ADC1_AVC - 1;
 			END IF;
 			IF (ADC2_MAX = 4294967295) AND (ADC2_AVC /= 0) THEN
-				ADC2_AVC <= ADC2_AVC - 1;
+			--	ADC2_AVC <= ADC2_AVC - 1;
 			END IF;
 			IF (ADC3_MAX = 4294967295) AND (ADC3_AVC /= 0) THEN
-				ADC3_AVC <= ADC3_AVC - 1;
+			--	ADC3_AVC <= ADC3_AVC - 1;
 			END IF;
 			
 		FOR j in 0 to 1	LOOP
-		realW(j) <= 3; --2.0.*cos(2.0.*pi.*k(j)./Fs(z)); 			  --gravar as 20 freq            --Goertzel
-		imagW(j) <= 1; --sin(2.0*pi*k(j)./Fs(z));                   --K são as freq injetadas no tecido
-		d1_1 <= 0;
-		d2_1 <= 0;
-		y <= 0;
+		realW(j) <= to_float(3.0,d1_1); --to_s(2*cos(0.00628),d1_1); 			  --gravar as 20 freq            --Goertzel
+		imagW(j) <= to_float(2.0,d1_1); --sin(2.0*pi*k(j)./Fs(z));                   --K são as freq injetadas no tecido
+		d1_1 <= to_float(0,d1_1);
+		d1_2 <= to_float(0,d1_2);
+		y <= to_float(0,y);
 		FOR COUNT_RMS in 0 to COUNT_RMS_FINAL LOOP
-		y <= (CONV_INTEGER(SIGNED (ADC1(COUNT_RMS+1))))*3.3/255 + realW(j)*d1_1 - d2_1;
-		d2_1 <= d1_1;
+		y <= resize(((to_float(1,y))*to_float(3300/102,y)+to_float(10000/4,y))/(to_float("000000000000000000000000" & ADC1(COUNT_RMS),y)-(to_float("000000000000000000000000" & ADC1(COUNT_RMS),y)))/to_float(4,y)+to_float(0.25,y) + to_float(3,y)*d1_1 - d1_2,y);
+		d1_2 <= d1_1;
 		d1_1 <= y;
 		END LOOP;
-		IMP(j) <= ((realW(j)/2*d1_1 - d2_1)*(realW(j)/2*d1_1 - d2_1)+(imagW(j)*d1_1)*(imagW(j)*d1_1)); --SQRT()
+		IMP_DUMMY <= sqrt(to_float(3.6,IMP_DUMMY));
+		--IMP_DUMMY <= resize(sqrt((realW(j)*d1_1/2 - d1_2) * (realW(j)*d1_1/2 - d1_2)+(imagW(j)*d1_1)*(imagW(j)*d1_1)),7,-4); --SQRT()
+		IMP(j) <= resize(to_float(IMP_DUMMY),y);
 		END LOOP;
 		ELSE
 		ADC1(COUNT_RMS) <= GPIO0 (17) & GPIO0 (15) & GPIO0 (13) & GPIO0 (11) & GPIO0 (9) & GPIO0 (7) & GPIO0 (5) & GPIO0 (3);
@@ -333,3 +344,5 @@ BEGIN
 	--GPIO1_25 DOWNTO 20 + 1, 2
 	END PROCESS;
 END a;
+
+

@@ -27,8 +27,7 @@
 # ========================
 set_global_assignment -name ORIGINAL_QUARTUS_VERSION "5.0 SP1"
 set_global_assignment -name PROJECT_CREATION_TIME_DATE "21:03:03  DECEMBER 31, 2005"
-set_global_assignment -name LAST_QUARTUS_VERSION 7.2
-set_global_assignment -name VHDL_FILE DE2_CLOCK.vhd
+set_global_assignment -name LAST_QUARTUS_VERSION 13.0
 
 # Pin & Location Assignments
 # ==========================
@@ -134,3 +133,27 @@ set_location_assignment PIN_M23 -to GPIO1[3]
 set_location_assignment PIN_M22 -to GPIO1[2]
 set_location_assignment PIN_K26 -to GPIO1[1]
 set_location_assignment PIN_K25 -to GPIO1[0]
+set_global_assignment -name USER_LIBRARIES "c:\\users\\admin\\documents\\github\\mestrado\\vhdl"
+set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id Top
+set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id Top
+set_global_assignment -name PARTITION_COLOR 16764057 -section_id Top
+set_global_assignment -name SIMULATION_MODE TIMING
+set_global_assignment -name EDA_SIMULATION_TOOL "ModelSim-Altera (Verilog)"
+set_global_assignment -name EDA_OUTPUT_DATA_FORMAT "VERILOG HDL" -section_id eda_simulation
+set_global_assignment -name LL_ROOT_REGION ON -entity DE2_CLOCK -section_id "Root Region"
+set_global_assignment -name LL_MEMBER_STATE LOCKED -entity DE2_CLOCK -section_id "Root Region"
+set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -entity DE2_CLOCK -section_id Top
+set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -entity DE2_CLOCK -section_id Top
+set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -entity DE2_CLOCK -section_id Top
+set_global_assignment -name PARTITION_COLOR 16764057 -entity DE2_CLOCK -section_id Top
+set_global_assignment -name EDA_TIME_SCALE "1 ps" -section_id eda_simulation
+set_global_assignment -name EDA_GENERATE_FUNCTIONAL_NETLIST OFF -section_id eda_simulation
+set_global_assignment -name VECTOR_OUTPUT_FORMAT VWF
+set_global_assignment -name INCREMENTAL_VECTOR_INPUT_SOURCE "C:/Users/Admin/Documents/GitHub/Mestrado/VHDL/Waveform3.vwf"
+set_global_assignment -name VHDL_FILE float_pkg.vhdl -library ieee_proposed
+set_global_assignment -name VHDL_FILE fixed_pkg.vhdl -library ieee_proposed
+set_global_assignment -name VHDL_FILE fixed_float_types.vhdl -library ieee_proposed
+set_global_assignment -name VHDL_FILE DE2_CLOCK.vhd
+set_global_assignment -name VHDL_FILE my_library.vhd
+set_global_assignment -name VHDL_FILE Types.vhd
+set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top
