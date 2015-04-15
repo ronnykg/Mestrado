@@ -2,7 +2,12 @@ LIBRARY IEEE;
 USE  IEEE.STD_LOGIC_1164.all;
 USE  IEEE.STD_LOGIC_ARITH.all;
 USE  IEEE.STD_LOGIC_UNSIGNED.all;
---USE  IEEE.numeric_std.all;
+USE  IEEE.numeric_std.all;
+
+use work.isp_hal.all;
+use work.isp_drv.all;
+use work.devreq_inc.all;
+
 --USE  WORK.MY_PACKAGE.all;
 --USE  IEEE.math_real.all;
 LIBRARY IEEE_PROPOSED;
@@ -12,10 +17,28 @@ use IEEE_PROPOSED.fixed_pkg.all;
 use IEEE_PROPOSED.float_pkg.all;
 --use work.MY_LIBRARY.all;
 use work.types.all; --needed for my_library (declarations)
--- This code displays time in the DE2's LCD Display
--- Key2  resets time
+
 ENTITY DE2_CLOCK IS
-	PORT(reset, clk_50Mhz	: IN	STD_LOGIC;
+	PORT(--DE2 board config USB
+  OTG_FSPEED  : out    std_logic;            --USB Full Speed 
+  OTG_LSPEED  : out    std_logic;            --USB Low Speed 
+  --ISP1368  
+  OTG_DATA  : inout    std_logic_vector(15 downto 0);  --ISP1362 Data bus 16 bits
+  OTG_INT1  : in    std_logic;                  --ISP1362 Interrupt 2 (Peripheral Interrupts) 
+  OTG_RST_N  : out    std_logic;                --ISP1362 Reset pin
+  OTG_ADDR  : out    std_logic_vector(1 downto 0);      --ISP1362 Address 2 Bits[peripheral,command]
+  OTG_CS_N  : out    std_logic;                  --ISP1362 Chip Select 
+  OTG_RD_N  : out    std_logic;                  --ISP1362 Write 
+  OTG_WR_N  : out    std_logic;                  --ISP1362 Read   
+  -- not used
+  OTG_DACK0_N  : out    std_logic;                --ISP1362 DMA Acknowledge 1 
+  OTG_DACK1_N  : out    std_logic;                --ISP1362 DMA Acknowledge 2
+ --I/O...
+ -- KEY                  : in  std_logic_vector(3 downto 0); --key(0) is reset
+  SW                    : in  std_logic_vector(17 downto 0);
+  LEDR                  : out  std_logic_vector(16 downto 0) := "00000000000000000"; --LED 17 is the SEC_LED
+------------LCD------------------- 
+	reset, clk_50Mhz	: IN	STD_LOGIC;
 		 LCD_RS, LCD_E, LCD_ON, RESET_LED, SEC_LED		: OUT	STD_LOGIC;
 		 LCD_RW				   : BUFFER STD_LOGIC;
 		 GPIO0				   : INOUT	STD_LOGIC_VECTOR(35 DOWNTO 0);
@@ -28,7 +51,7 @@ ARCHITECTURE a OF DE2_CLOCK IS
 	WRITE_CHAR2,WRITE_CHAR3, RETURN_HOME, TOGGLE_E, RESET1, RESET2, 
 	RESET3, DISPLAY_OFF, DISPLAY_CLEAR); -- WRITE_CHAR4,WRITE_CHAR5,WRITE_CHAR6,WRITE_CHAR7,WRITE_CHAR8, WRITE_CHAR9, WRITE_CHAR10,
 	type memory is array (INTEGER range <>) of std_logic_vector(7 downto 0);
-	type memoryint is array (INTEGER range <>) of float32;
+	type memoryint is array (INTEGER range <>) of float (float_exponent_width downto -float_fraction_width);
 	--type memoryDAC is array (INTEGER range <>) of std_logic_vector(11 downto 0);
 	SIGNAL state, next_command: STATE_TYPE;
 	SIGNAL DATA_BUS_VALUE: STD_LOGIC_VECTOR(7 DOWNTO 0);
@@ -42,7 +65,7 @@ ARCHITECTURE a OF DE2_CLOCK IS
 	SIGNAL ADC1, ADC2, ADC3: memoryint(0 to 9) := ((others=> (others=>'0'))); --(3999999 downto 0);
 	--SIGNAL ADC1: memoryDAC(24999 downto 0) := ((others=> (others=>'0'))); --(3999999 downto 0);
 	--SIGNAL FREQ_DIV: INTEGER RANGE 40 to 400000;
-	SIGNAL COUNT_RMS: INTEGER RANGE 0 to 9:= 0;
+	SIGNAL a, COUNT_RMS, COUNT_RMS2: INTEGER RANGE 0 to 9:= 0;
 	SIGNAL COUNT_DAC: INTEGER RANGE 0 to 11:= 0;	
 	--SIGNAL j: INTEGER := 0;
 	--SIGNAL ADC1_MAX: INTEGER RANGE 0 to 250 := 0;
@@ -52,17 +75,27 @@ ARCHITECTURE a OF DE2_CLOCK IS
 	SIGNAL ADC2_AVC: STD_LOGIC_VECTOR(2 DOWNTO 0) := "000"; --(GPIO1 (13), GPIO1 (15),GPIO1 (17) A
 	SIGNAL ADC3_AVC: STD_LOGIC_VECTOR(2 DOWNTO 0) := "000"; --(GPIO0 (21), GPIO0 (23),GPIO0 (25) A
 	CONSTANT COUNT_RMS_FINAL: INTEGER := 9;--24999;
-	SHARED VARIABLE x, z:    float32 := (others=>'0');
+	SHARED VARIABLE x, x2:    float (float_exponent_width downto -float_fraction_width) := (others=>'0');
 	SIGNAL realW: memoryint(0 to 19); 
 	SIGNAL imagW: memoryint(0 to 19); 
-	SIGNAL IMP: memoryint(0 to 0):= ((others=> (others=>'0')));  --100k is OK
-	SIGNAL IMP_DUMMY1:    STD_LOGIC_VECTOR(7 DOWNTO 0) :="00000000";
-	SIGNAL IMP_DUMMY2:    STD_LOGIC_VECTOR(31 downto 0);
-	SHARED VARIABLE IMP_DUMMY:    STD_LOGIC_VECTOR(31 DOWNTO 0) := (others=>'0');
-	SHARED VARIABLE BLA:    UNSIGNED(7 DOWNTO 0);
-	SHARED VARIABLE FLAG: integer := 0;
+	--SIGNAL IMP: memoryint(0 to 0):= ((others=> (others=>'0')));  --100k is OK
+	SIGNAL IMP_DUMMY: memory(0 to 19) := ((others=> (others=>'0'))); --(3999999 downto 0);  --  STD_LOGIC_VECTOR(7 DOWNTO 0) :="00000000";
+	--SHARED VARIABLE BLA:    signed(23 downto 0) ;
+	--SHARED VARIABLE FLAG: integer := 0;
 	--function  sqrt  ( d : UNSIGNED ) return UNSIGNED ;
-	
+	signal clk,clk1     : std_logic;
+	signal slowclk_en : bit;
+	signal reset_usb, reset_synch   : std_logic;
+	--USB stuff
+	signal hal_i : isp_hal_in_t;
+	signal hal_o : isp_hal_out_t;
+	signal drv_i : isp_drv_in_t;
+	signal drv_o : isp_drv_out_t;
+	type stateT is (loopOuter, loopInner);
+	signal state_usb: stateT;
+	signal counter, innerCounter, counter1: integer := 0;
+	signal sending: std_logic := '0';
+
 	component my_library
 		port (
                  DAC_SIGNAL: OUT memoryDAC(0 to 10);-- := ((others=> (others=>'0')));
@@ -85,15 +118,12 @@ RESET => RESET
 	SEC_LED <= BCD_SECD0(0);
 -- BIDIRECTIONAL TRI STATE LCD DATA BUS
 	DATA_BUS <= DATA_BUS_VALUE WHEN LCD_RW = '0' ELSE "ZZZZZZZZ";
---	(GPIO0 (14), GPIO0 (16), GPIO0 (18)) <= ADC1_AVC;
---	(GPIO1 (13), GPIO1 (15), GPIO1 (17)) <= ADC2_AVC;
---	(GPIO1 (19), GPIO1 (23), GPIO1 (25)) <= ADC3_AVC;
 	realW(0) <= to_float(1.97255,realW(0)); --to_s(2*cos(0.00628),d1_1); 			  --gravar as 20 freq            --Goertzel
 	imagW(0) <= to_float(0.16512,realW(0)); --sin(2.0*pi*k(j)./Fs(z));                   --K sï¿½o as freq injetadas no tecido
 	realW(1) <= to_float(1.9998,realW(0)); --to_s(2*cos(0.00628),d1_1); 			  --gravar as 20 freq            --Goertzel
 	imagW(1) <= to_float(0.0126,realW(0)); --sin(2.0*pi*k(j)./Fs(z));                   --K sï¿½o as freq injetadas no tecido
 	realW(2) <= to_float(0.1,realW(0)); --to_s(2*cos(0.00628),d1_1); 			  --gravar as 20 freq            --Goertzel
-	imagW(2) <= to_float(-0.1,realW(0)); --sin(2.0*pi*k(j)./Fs(z));                   --K sï¿½o as freq injetadas no tecido
+	imagW(2) <= to_float(-0.1,realW(0)); 	--sin(2.0*pi*k(j)./Fs(z));                   --K sï¿½o as freq injetadas no tecido
 	ADC1(0) <= to_float(11.0,realW(0));
 	ADC1(1) <= to_float(10.686,realW(0));
 	ADC1(2) <= to_float(9.7963,realW(0));
@@ -103,8 +133,144 @@ RESET => RESET
 	ADC1(6) <= to_float(4.2485,realW(0));
 	ADC1(7) <= to_float(3.4239,realW(0));
 	ADC1(8) <= to_float(3.0710,realW(0));
-	ADC1(9) <= to_float(3.1599,realW(0));
-		PROCESS	
+	ADC1(9) <= to_float(3.1599,realW(0));	
+	
+	ADC2(0) <= to_float(13.0,realW(0));
+	ADC2(1) <= to_float(12.685,realW(0));
+	ADC2(2) <= to_float(11.796,realW(0));
+	ADC2(3) <= to_float(10.483,realW(0));
+	ADC2(4) <= to_float(8.963,realW(0));
+	ADC2(5) <= to_float(7.479,realW(0));
+	ADC2(6) <= to_float(6.2484,realW(0));
+	ADC2(7) <= to_float(5.423,realW(0));
+	ADC2(8) <= to_float(5.071,realW(0));
+	ADC2(9) <= to_float(5.159,realW(0));	
+-------------------------------USB------------------------------	
+--DE2 USB config
+OTG_FSPEED  <='0';            -- 0 = Enable, Z = Disable 
+OTG_LSPEED  <='Z';            -- 0 = Enable, Z = Disable 
+
+--DE2 clock and reset config
+clk <= clk_50Mhz;
+
+p_reset: process
+begin
+  wait until rising_edge(clk);
+  reset_synch <= not(RESET);
+  reset_usb <= reset_synch;
+end process;
+                                 
+--produces 25MHz clock enable pulse for HAL 
+--assumes 50MHz clk, if this assumption changes,
+--this code needs to be modified
+p_pulse25MHz: process
+
+-- Example 1:  design clk is @ 50MHz
+--                   _   _   _   _   _   _   _   _  
+--clk @ 50MHz       | |_| |_| |_| |_| |_| |_| |_| |_
+--                   _ _     _ _     _ _     _ _    
+--pulse @ 25MHz     |   |_ _|   |_ _|   |_ _|   |_ _
+--
+-- Example 2:  design clk is @ 200MHz
+--                   _   _   _   _   _   _   _   _  
+--clk @ 200MHz      | |_| |_| |_| |_| |_| |_| |_| |_
+--                   _ _             _ _    
+--pulse @ 25MHz     |   |_ _ _ _ _ _|   |_ _ _ _ _ _
+
+begin
+  WAIT UNTIL CLK_50MHZ'EVENT AND CLK_50MHZ = '1';
+  slowclk_en <= not(slowclk_en);
+end process;
+
+-- hal port map
+hal_i.slowclk_en <= slowclk_en;
+OTG_RST_N <= hal_o.rst_n;
+OTG_ADDR <= hal_o.addr;
+OTG_CS_N <= hal_o.cs_n;
+OTG_RD_N <= hal_o.rd_n;
+OTG_WR_N <= hal_o.wr_n;  
+OTG_DACK0_N <= hal_o.dack0_n;
+OTG_DACK1_N <= hal_o.dack1_n;
+
+--hal
+hal_i.drv <= drv_o.hal;  
+h: hal port map (clk, reset_usb, OTG_DATA , hal_i, hal_o);
+
+--driver port map
+drv_i.int <= OTG_INT1; --IF LOOPBACK, DON'T NEED
+--driver
+drv_i.hal <= hal_o.drv;
+d: drv port map(clk,reset_usb, drv_i , drv_o);
+
+--device request handler
+dvrq: devreq port map(clk, reset_usb, drv_o.devreq, drv_i.devreq);
+
+--loopback (for demo)
+--drv_i.io <= drv_o.io; --when io.SData is ready, io.RDy will pulse for one clock cycle.
+--drv_i.io.Sdata(drv_o.io.Sdata'high downto 0) <= "00000000" & IMP_DUMMY1;
+
+demo_send: process(clk, SW)
+begin
+  if rising_edge(clk) then
+    if SW(0) = '1' then
+     if counter < 10 then
+	   if a =0 then
+       drv_i.io.Sdata(drv_o.io.Sdata'high downto 0) <= "0000000000000001";--
+		 elsif a = 1 then
+		 drv_i.io.Sdata(drv_o.io.Sdata'high downto 0) <= "00000000" & IMP_DUMMY(0);--"0000000000000011";--
+		 elsif a = 2 then
+		 drv_i.io.Sdata(drv_o.io.Sdata'high downto 0) <= "0000000000000010";--
+		 elsif a = 3 then
+		 drv_i.io.Sdata(drv_o.io.Sdata'high downto 0) <= "00000000" & IMP_DUMMY(1);--"0000000000000011";--
+		 elsif a = 4 then
+		 drv_i.io.Sdata(drv_o.io.Sdata'high downto 0) <= "0000000000000011";--
+		 elsif a = 5 then
+		 drv_i.io.Sdata(drv_o.io.Sdata'high downto 0) <= "00000000" & IMP_DUMMY(2);--"0000000000000011";--
+		 --else
+		 --drv_i.io.Sdata(drv_o.io.Sdata'high downto 0) <= "0000000000000100";--
+		 end if;
+ 
+		 if a = 9 then
+		 a <= 0;
+		 else
+		 a <= a +1;
+		 end if;
+		--drv_i.io.Sdata(7 downto 0) <= IMP_DUMMY1;--"0000000000000011";--
+		--counter1 <= counter1 +1;
+		--if counter1 = 10 then
+		--counter1 <= 0;
+		--end if;
+		--drv_i.io.Sdata(drv_o.io.Sdata'high downto 0) <= std_logic_vector(to_unsigned(counter, 16));
+		--drv_i.io.Sdata,(7 downto 0) <= std_logic_vector(to_unsigned(counter, 8));
+      if innerCounter <= 0 then
+        drv_i.io.Rdy <= '1';
+      -- LEDR(drv_o.io.Sdata'high downto 0) <= "1111111111111111";
+       innerCounter <= innerCounter + 1;
+      elsif innerCounter > 0 and innerCounter < 1500 then
+         drv_i.io.Rdy <= '0';
+      -- LEDR(drv_o.io.Sdata'high downto 0) <= "1000111100001111";
+       innerCounter <= innerCounter + 1;
+      elsif innerCounter = 1500 then
+        innerCounter <= 0;
+       counter <= counter + 1;
+      end if;
+      elsif counter = 10 then 
+       counter <= 0;
+      innerCounter <= 0;
+      drv_i.io.Rdy <= '0';
+       LEDR(drv_o.io.Sdata'high downto 0) <= "0000000000000000";
+      drv_i.io.Sdata(drv_o.io.Sdata'high downto 0) <= (others => '0');
+    end if;
+   else
+     counter <= 0;
+    innerCounter <= 0;
+     drv_i.io.Rdy <= '0';
+     drv_i.io.Sdata(drv_o.io.Sdata'high downto 0) <= (others => '0');
+    end if;
+  end if;
+end process;
+-------------------------------USB------------------------------		
+	PROCESS	
 	BEGIN
 	 WAIT UNTIL CLK_50MHZ'EVENT AND CLK_50MHZ = '1';
 		IF RESET = '0' THEN
@@ -234,9 +400,9 @@ RESET => RESET
 						LCD_RS <= '1';
 						LCD_RW <= '0';
 --						IF FLAG = 20 THEN
-						DATA_BUS_VALUE <= IMP_DUMMY1;
+--						DATA_BUS_VALUE <= X"3E";
 --						ELSE
---						DATA_BUS_VALUE <= X"3D" ;
+						DATA_BUS_VALUE <= X"3D" ; --IMP_DUMMY1; --
 --						END IF;
 						state <= TOGGLE_E;
 						next_command <= RETURN_HOME; --WRITE_CHAR4;
@@ -330,7 +496,7 @@ RESET => RESET
          END IF;
         END IF;
        END IF;
-	 END IF;
+	  END IF;
 	END IF;
  END PROCESS;
   PROCESS	
@@ -349,9 +515,9 @@ RESET => RESET
 		END IF;
   END PROCESS;
 	PROCESS --(CLK_12MHZ, reset) --it enter in the rising and falling edge, the freq is acctually 6,25Mhz
-	VARIABLE d1_1: float32 := (others=>'0');
-	VARIABLE d1_2: float32 := (others=>'0');
-	VARIABLE y:    float32 := (others=>'0');
+	VARIABLE d1_1: float (float_exponent_width downto -float_fraction_width) := (others=>'0');
+	VARIABLE d1_2: float (float_exponent_width downto -float_fraction_width) := (others=>'0');
+	VARIABLE y:    float (float_exponent_width downto -float_fraction_width) := (others=>'0');
 	BEGIN
 	WAIT UNTIL CLK_50MHZ'EVENT AND CLK_50MHZ = '1';
 
@@ -359,36 +525,55 @@ RESET => RESET
 	    COUNT_RMS <= 0;
 		 
 		ELSIF COUNT_RMS = COUNT_RMS_FINAL THEN
-			FOR j in 0 to 0 LOOP
+			FOR j in 0 to 2 loop
 			d1_1 :=  to_float(0.0,y);
 			d1_2 :=  to_float(0.0,y);
 			y :=     to_float(0.0,y);
 		FOR k in 0 to COUNT_RMS_FINAL LOOP
-		--y <= resize(to_float("000000000000000000000000" & ADC1(COUNT_RMS))*33000/1020+30000/4,y);
-		--y <= resize(to_float("000000000000000000000000" & ADC1(COUNT_RMS))+resize(multiply(realW(j),d1_1),y) - d1_2,y);
+		-- y <= resize(to_float("000000000000000000000000" & ADC1(COUNT_RMS))*33000/1020+30000/4,y);
+		-- y <= resize(to_float("000000000000000000000000" & ADC1(COUNT_RMS))+resize(multiply(realW(j),d1_1),y) - d1_2,y);
 		-- y <= resize(to_float("000000000000000000000000" & ADC1(COUNT_RMS))*32.3529+7500,y);
 		-- y <= resize(divide(y,resize((1-y*0.0001),y))+resize(multiply(realW(j),d1_1),y) - d1_2,y);		
-		--y := resize(to_float("000000000000000000000000" & ADC1(k))+resize(multiply(realW(j),d1_1),y) - d1_2,y);
+		-- y := resize(to_float("000000000000000000000000" & ADC1(k))+resize(multiply(realW(j),d1_1),y) - d1_2,y);
 		y := resize(ADC1(k)+resize(multiply(realW(j),d1_1),y) - d1_2,y);
 		d1_2 := d1_1;
 		d1_1 := y;
 		END LOOP;		
-		x := resize(sqrt((realW(j)*d1_1*0.5 - d1_2) * (realW(j)*d1_1*0.5 - d1_2)+(imagW(j)*d1_1)*(imagW(j)*d1_1)),y);
+		x := resize((sqrt((realW(j)*d1_1*to_float(0.5) - d1_2) * (realW(j)*d1_1*to_float(0.5) - d1_2)+(imagW(j)*d1_1)*(imagW(j)*d1_1))),y);
 		
---IMP_DUMMY := std_logic_vector(UNSIGNED(x));
---		IMP_DUMMY1(7) <= IMP_DUMMY(7);
---		IMP_DUMMY1(6) <= IMP_DUMMY(6);
---		IMP_DUMMY1(5) <= IMP_DUMMY(5);
---		IMP_DUMMY1(4) <= IMP_DUMMY(4);
---		IMP_DUMMY1(3) <= IMP_DUMMY(3);
---		IMP_DUMMY1(2) <= IMP_DUMMY(2);
---		IMP_DUMMY1(1) <= IMP_DUMMY(1);
---		IMP_DUMMY1(0) <= IMP_DUMMY(0);
-		--IMP_DUMMY1 <= std_logic_vector(resize(x*0.1+48,7,0));		
---		FOR n in 0 to 50000 LOOP
---		END LOOP;
+				--IMP_DUMMY := std_logic_vector(UNSIGNED(x));
+				--BLA := to_integer(x);
+				--IMP_DUMMY := std_logic_vector(x);
+		FOR k in 0 to 255 LOOP
+		if x > k then
+		IMP_DUMMY(j) <= std_logic_vector(to_unsigned(k,8));
+		end if;
+		end loop;
 		
-		--IMP_DUMMY := 48 + IMP_DUMMY;
+--		IF X>10 THEN
+--		IMP_DUMMY1 <= "00111010";
+--		ELSIF X>9 THEN
+--		IMP_DUMMY1 <= "00111001";
+--		ELSIF X>8 THEN
+--		IMP_DUMMY1 <= "00111000";
+--		ELSIF X>7 THEN
+--		IMP_DUMMY1 <= "00110111";
+--		ELSIF X>6 THEN
+--		IMP_DUMMY1 <= "00110110";
+--		ELSIF X>5 THEN
+--		IMP_DUMMY1 <= "00110101";
+--		ELSIF X>4 THEN
+--		IMP_DUMMY1 <= "00110100";
+--		ELSIF X>3 THEN
+--		IMP_DUMMY1 <= "00110011";
+--		ELSIF X>2 THEN
+--		IMP_DUMMY1 <= "00110010";
+--		ELSIF X>1 THEN
+--		IMP_DUMMY1 <= "00110001";
+--		ELSIF X>0 THEN
+--		IMP_DUMMY1 <= "00110000";
+--		END IF;
+
 		--IMP_DUMMY1 := 48 + IMP_DUMMY1;
 		COUNT_RMS <= 0;
 		END LOOP;
@@ -398,17 +583,47 @@ RESET => RESET
 		--ADC3(COUNT_RMS) <= GPIO1 (18) & GPIO1 (16) & GPIO1 (14) & GPIO1 (12) & GPIO1 (10) & GPIO1 (8) & GPIO1 (6) & GPIO1 (4);
 		COUNT_RMS <= COUNT_RMS +1; -- if the smallest freq is 100HZ it will save 100000
 		END IF;
---		FLAG <= FLAG + 1;
---		IF FLAG = 21 THEN
---						FLAG <= 0;
---						END IF;
+
 	--GPIO0_25 TO 35, 34 DOWNTO 24  DAC 
 	--GPIO0_6 DOWNTO 0 ADC 2 (NOT USED)
 	--GPIO0_17 DOWNTO 3 ADC 1 (2 in 2)
 	--GPIO1_11 DOWNTO 0 ADC 3 (2 in 2)
 	--GPIO1_18 DOWNTO 4 ADC 4 (2 in 2)
 	END PROCESS;
-
+-------------------------------------ADC2-------------------------------------------
+--PROCESS --(CLK_12MHZ, reset) --it enter in the rising and falling edge, the freq is acctually 6,25Mhz
+--	VARIABLE d1_1: float (float_exponent_width downto -float_fraction_width) := (others=>'0');
+--	VARIABLE d1_2: float (float_exponent_width downto -float_fraction_width) := (others=>'0');
+--	VARIABLE y:    float (float_exponent_width downto -float_fraction_width) := (others=>'0');
+--	BEGIN
+--	WAIT UNTIL CLK_50MHZ'EVENT AND CLK_50MHZ = '1';
+--
+--		IF RESET = '0' THEN
+--	    COUNT_RMS2 <= 0;
+--		 
+--		ELSIF COUNT_RMS = COUNT_RMS_FINAL THEN
+--			FOR j in 0 to 0 LOOP
+--			d1_1 :=  to_float(0.0,y);
+--			d1_2 :=  to_float(0.0,y);
+--			y :=     to_float(0.0,y);
+--				FOR k in 0 to COUNT_RMS_FINAL LOOP
+--					y := resize(ADC2(k)+resize(multiply(realW(j),d1_1),y) - d1_2,y);
+--					d1_2 := d1_1;
+--					d1_1 := y;
+--				END LOOP;		
+--			x2 := resize((sqrt((realW(j)*d1_1*to_float(0.5) - d1_2) * (realW(j)*d1_1*to_float(0.5) - d1_2)+(imagW(j)*d1_1)*(imagW(j)*d1_1))),y);
+--				FOR k in 0 to 255 LOOP
+--					if x2 > k then
+--						IMP_DUMMY2 <= std_logic_vector(to_unsigned(k,8));
+--					end if;
+--				end loop;
+--			COUNT_RMS2 <= 0;
+--			END LOOP;
+--		ELSE
+--			COUNT_RMS2 <= COUNT_RMS2 +1; -- if the smallest freq is 100HZ it will save 100000
+--		END IF;
+--END PROCESS;
+	
 PROCESS	(CLK_12MHZ, reset)
 	BEGIN
 	    IF RESET = '0' THEN
