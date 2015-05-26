@@ -1,0 +1,4 @@
+Package Types is
+Subtype Segment is std_logic_vector(11 downto 0);
+type memoryDAC is array (INTEGER range <>) of Segment;
+end types;

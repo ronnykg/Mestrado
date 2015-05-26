@@ -1,0 +1,8 @@
+entity my_library is
+
+end entity my_library
+
+architecture my_library of my_library is
+SIGNAL ADC1: memoryint(24999 downto 0) := ((others=> (others=>'0'))); --(3999999 downto 0);
+begin
+end architecture my_library

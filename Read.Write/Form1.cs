@@ -80,16 +80,16 @@ namespace Examples
 
                 //if (!String.IsNullOrEmpty(cmdLine))
                 //{
-                int BytesReadWrite = 1024;
-                int Freqs = 20;
+                int BytesReadWrite = 4096;
+               // int Freqs = 20;
                     int bytesWritten;
 
                     byte[] bytesWritten1 = new byte[BytesReadWrite];
                     for (int i = BytesReadWrite-1; i >= 0; i--)
                     {
-                        bytesWritten1[i] = (byte)i;
+                        bytesWritten1[i] = 1;//(byte)i;
                     }
-                    ec = writer.Write(bytesWritten1, 100, out bytesWritten);
+                   ec = writer.Write(bytesWritten1, 1000, out bytesWritten);
                     //ec = writer.Write(Encoding.Default.GetBytes(cmdLine), 2000, out bytesWritten);
                    // if (ec != ErrorCode.None) throw new Exception(UsbDevice.LastErrorString);
 
@@ -105,8 +105,9 @@ namespace Examples
                         //ec = reader.SubmitAsyncTransfer(readBuffer, 0, readBuffer.Length, 100, out usbReadTransfer);
                                 int start_time = DateTime.Now.Millisecond;
 
-                       ec = reader.Read(readBuffer, 100, out bytesRead);
+                       ec = reader.Read(readBuffer, 1000, out bytesRead);
                          int elapsed_time = DateTime.Now.Millisecond - start_time;
+
                          float[] SumX = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
                          //int Count = BytesReadWrite/2;
                          float[] SumX2 = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
@@ -120,10 +121,10 @@ namespace Examples
                         chart1.Series["Linfit2"].Points.Clear();
                         chart1.Titles.Clear();
                         int[] count = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-                        for (int i = 0; i <= BytesReadWrite - 1; i = i + 2)
+                        for (int i = 0; i <= BytesReadWrite - 1 - 4; i = i + 2) //THE LIBRARY READS 32 DATA, BUT FPGA SENDS ONLY 16, SO HALF IS JUST ZEROES
                         {                            
                             //Console.Write(Encoding.Default.GetString(readBuffer, 0, bytesRead)); 
-                            if (readBuffer[i] == 1 && ((i+2)<BytesReadWrite))
+                            if (readBuffer[i] == 1 && readBuffer[i + 8] == 16)
                             {
                                 count[0]++;
                                 chart1.Series["Imp"].Points.AddXY(count[0], readBuffer[i + 2]);
@@ -131,8 +132,50 @@ namespace Examples
                                 SumY[0] = SumY[0] + readBuffer[i+2];
                                 SumX2[0] = SumX2[0] + count[0] * count[0];
                                 SumXY[0] = SumXY[0] + count[0] * readBuffer[i + 2];
+
+                                count[1]++;
+                                chart1.Series["Imp1"].Points.AddXY(count[1], readBuffer[i + 4]);
+                                SumX[1] = SumX[1] + count[1];
+                                SumY[1] = SumY[1] + readBuffer[i + 4];
+                                SumX2[1] = SumX2[1] + count[1] * count[1];
+                                SumXY[1] = SumXY[1] + count[1] * readBuffer[i + 4];
+
+                                count[2]++;
+                                chart1.Series["Imp2"].Points.AddXY(count[2], readBuffer[i + 6]);
+                                SumX[2] = SumX[2] + count[2];
+                                SumY[2] = SumY[2] + readBuffer[i + 6];
+                                SumX2[2] = SumX2[2] + count[2] * count[2];
+                                SumXY[2] = SumXY[2] + count[2] * readBuffer[i + 6];
+
+                                i = i + 2;
                             }
-                            else if (readBuffer[i] == 2 && ((i + 2) < BytesReadWrite))
+                            else if (readBuffer[i] == 16 && readBuffer[i + 8] == 1)
+                            {
+                                count[0]++;
+                                chart1.Series["Imp"].Points.AddXY(count[0], readBuffer[i + 2]);
+                                SumX[0] = SumX[0] + count[0];
+                                SumY[0] = SumY[0] + readBuffer[i + 2];
+                                SumX2[0] = SumX2[0] + count[0] * count[0];
+                                SumXY[0] = SumXY[0] + count[0] * readBuffer[i + 2];
+
+                                count[1]++;
+                                chart1.Series["Imp1"].Points.AddXY(count[1], readBuffer[i + 4]);
+                                SumX[1] = SumX[1] + count[1];
+                                SumY[1] = SumY[1] + readBuffer[i + 4];
+                                SumX2[1] = SumX2[1] + count[1] * count[1];
+                                SumXY[1] = SumXY[1] + count[1] * readBuffer[i + 4];
+
+                                count[2]++;
+                                chart1.Series["Imp2"].Points.AddXY(count[2], readBuffer[i + 6]);
+                                SumX[2] = SumX[2] + count[2];
+                                SumY[2] = SumY[2] + readBuffer[i + 6];
+                                SumX2[2] = SumX2[2] + count[2] * count[2];
+                                SumXY[2] = SumXY[2] + count[2] * readBuffer[i + 6];
+
+                                i = i + 2;
+                            }
+                                /*
+                            else if (readBuffer[i] == 2 && readBuffer[i + 4] == 3 && readBuffer[i - 4] == 1)
                             {
                                 count[1]++;
                                 chart1.Series["Imp1"].Points.AddXY(count[1], readBuffer[i + 2]);
@@ -140,8 +183,9 @@ namespace Examples
                                 SumY[1] = SumY[1] + readBuffer[i+2];
                                 SumX2[1] = SumX2[1] + count[1] * count[1];
                                 SumXY[1] = SumXY[1] + count[1] * readBuffer[i + 2];
+                                i = i + 2;
                             }
-                            else if (readBuffer[i] == 3 && ((i + 2) < BytesReadWrite))
+                            else if (readBuffer[i] == 3 && readBuffer[i + 4] == 1 && readBuffer[i - 4] == 2)
                             {
                                 count[2]++;
                                 chart1.Series["Imp2"].Points.AddXY(count[2], readBuffer[i + 2]);
@@ -149,7 +193,9 @@ namespace Examples
                                 SumY[2] = SumY[2] + readBuffer[i+2];
                                 SumX2[2] = SumX2[2] + count[2] * count[2];
                                 SumXY[2] = SumXY[2] + count[2] * readBuffer[i + 2];
+                                i = i + 2;
                             }
+                                 * */
 
                         }
                         float[] XMean = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
