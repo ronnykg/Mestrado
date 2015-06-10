@@ -22,7 +22,7 @@ namespace Examples
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new Form1());
-            /*
+            
             ErrorCode ec = ErrorCode.None;
 
             try
@@ -133,7 +133,7 @@ namespace Examples
                  Application.Run(new Form1());
                 Console.ReadKey();
             }
-            */
+            
              }
              
     }

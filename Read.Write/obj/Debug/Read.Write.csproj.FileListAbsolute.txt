@@ -9,3 +9,8 @@ C:\Program Files\LibUsbDotNet\Src\Examples\Read.Write\obj\Debug\Read.Write.pdb
 C:\Program Files\LibUsbDotNet\Src\Examples\Read.Write\obj\Debug\Examples.Form1.resources
 C:\Program Files\LibUsbDotNet\Src\Examples\Read.Write\obj\Debug\Read.Write.csproj.GenerateResource.Cache
 C:\Program Files\LibUsbDotNet\Src\Examples\Read.Write\obj\Debug\Examples.Properties.Resources.resources
+C:\Users\Admin\Documents\GitHub\Mestrado\Read.Write\obj\Debug\Read.Write.csprojResolveAssemblyReference.cache
+C:\Users\Admin\Documents\GitHub\Mestrado\Read.Write\obj\Debug\Examples.Form1.resources
+C:\Users\Admin\Documents\GitHub\Mestrado\Read.Write\obj\Debug\Examples.Properties.Resources.resources
+C:\Users\Admin\Documents\GitHub\Mestrado\Read.Write\obj\Debug\Read.Write.csproj.GenerateResource.Cache
+C:\Users\Admin\Documents\GitHub\Mestrado\Read.Write\obj\Debug\Read.Write.exe
